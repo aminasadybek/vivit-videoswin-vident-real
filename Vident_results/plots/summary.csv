@@ -1,5 +1,0 @@
-Model,Regime,Best IoU,Best Dice,Best Epoch,Time (h)
-Video Swin-B,FULL,0.8204,0.8944,8,2.50
-Video Swin-B,LORA,0.8204,0.8960,15,2.44
-ViViT-B,FULL,0.7817,0.8697,8,1.72
-ViViT-B,LORA,0.7649,0.8600,7,1.83
