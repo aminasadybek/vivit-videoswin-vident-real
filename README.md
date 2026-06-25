@@ -2,8 +2,6 @@
 
 Dental quadrant (Q1–Q4) classification on the [Vident-real](https://mostwiedzy.pl/en/open-research-data/) intra-oral dental video dataset, comparing **ViViT-B** and **Video Swin-B** (Kinetics-400 pretrained) under **full fine-tuning** vs **LoRA**. Protocol: select on validation, report on test.
 
-ESAI406, Nazarbayev University · ESAI Lab · supervised by Prof. Jurn Gyu Park.
-
 ## Setup
 - Dataset: Vident-real (Gdansk Univ., CC BY-NC 4.0), 65/10/25 train/val/test videos; labels from the classification spreadsheet, matched to folders by frame count. Dataset not included.
 - 4 classes (Q1–Q4); 32-frame clips at 224×224; class-weighted cross-entropy for imbalance.
