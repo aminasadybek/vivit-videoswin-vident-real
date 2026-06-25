@@ -55,21 +55,6 @@ Dental quadrant (Q1–Q4) classification. The dataset is small (65/10/25 videos)
 
 Validation accuracy is computed per video and moves in ~10% steps (only 10 validation videos). Under full fine-tuning the model overfits the small training set quickly (training accuracy rises while validation accuracy falls). Final per-model test results and the model selected by validation are summarized in `Vident_cls_results/plots/summary.csv`.
 
-## Repository structure
-
-```
-vident_swin_seg_metrics.py    # segmentation training (Video Swin) + full metrics
-vident_vivit_seg_metrics.py   # segmentation training (ViViT) + full metrics
-plot_seg_results.py           # IoU/Dice + loss curves, combined plot, summary table
-make_overlays.py              # input|GT|Swin|ViViT comparison panels (no retraining)
-
-vident_classify.py            # quadrant classification (both models, both regimes)
-plot_cls_results.py           # accuracy/loss curves + confusion matrices + summary
-
-Vident_cls_results/plots/     # generated figures and summary.csv
-results_*.json                # per-run logs (per-epoch metrics + final results)
-```
-
 ## Usage
 
 ```bash
