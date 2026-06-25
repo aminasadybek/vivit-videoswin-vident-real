@@ -1,0 +1,5 @@
+Model,Regime,Val Acc,Test Acc,Test Bal Acc,Best Ep,Time (h)
+Video Swin-B,FULL,0.7000,0.5200,0.4583,1,1.79
+Video Swin-B,LORA,0.7000,0.5600,0.4687,12,1.75
+ViViT-B,FULL,0.7000,0.4800,0.3333,6,1.57
+ViViT-B,LORA,0.7000,0.6000,0.5000,2,1.61
