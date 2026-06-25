@@ -51,9 +51,22 @@ Overlay panels (`input | ground truth | Video Swin | ViViT`) are in the segmenta
 
 ## Classification results
 
-Dental quadrant (Q1–Q4) classification. The dataset is small (65/10/25 videos) and heavily imbalanced (Q1 ≈ half), so overall accuracy is reported **alongside balanced accuracy, per-class accuracy, and a confusion matrix**; a trivial "always predict Q1" baseline reaches ~48%.
+Dental quadrant (Q1–Q4) classification, per-video prediction (clips aggregated per video). The dataset is small (65/10/25 videos) and heavily imbalanced (Q1 ≈ half), so overall accuracy is reported alongside balanced accuracy and a confusion matrix. A trivial "always predict Q1" baseline reaches ~48% on the test set.
 
-Validation accuracy is computed per video and moves in ~10% steps (only 10 validation videos). Under full fine-tuning the model overfits the small training set quickly (training accuracy rises while validation accuracy falls). Final per-model test results and the model selected by validation are summarized in `Vident_cls_results/plots/summary.csv`.
+| Model | Regime | Val Acc | Test Acc | Test Balanced Acc | Best Epoch |
+|---|---|---|---|---|---|
+| Video Swin-B | Full FT | 0.700 | 0.520 | 0.458 | 1 |
+| Video Swin-B | LoRA | 0.700 | 0.560 | 0.469 | 12 |
+| ViViT-B | Full FT | 0.700 | 0.480 | 0.333 | 6 |
+| ViViT-B | LoRA | 0.700 | **0.600** | **0.500** | 2 |
+
+**Findings:**
+- **LoRA outperforms full fine-tuning for both backbones** (Swin 0.56 vs 0.52, ViViT 0.60 vs 0.48). On a dataset this small, full fine-tuning overfits almost immediately — training accuracy reaches ~100% while validation/test collapse and validation loss diverges — whereas LoRA's limited capacity acts as a regularizer. Best configuration overall: **ViViT-B + LoRA** (test accuracy 0.60, balanced 0.50).
+- Results are **modest and limited by the dataset**. Balanced accuracies (0.33–0.50) sit above the 0.25 random-chance level but show that predicting dental quadrant from video is only weakly learnable here; all confusion matrices show the models leaning toward the majority class Q1. ViViT-B Full FT (0.48) does not exceed the always-Q1 baseline.
+
+**Limitation — model selection.** With only 10 validation videos, validation accuracy is quantized to 10% steps and **all four configurations tie at 0.700**, so validation cannot distinguish between them. The intended "select on validation, report on test" protocol is therefore unreliable for this split; the test ranking above is reported for transparency, not as a validated selection.
+
+```
 
 ## Usage
 
