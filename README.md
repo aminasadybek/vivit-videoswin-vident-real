@@ -66,26 +66,6 @@ Dental quadrant (Q1–Q4) classification, per-video prediction (clips aggregated
 
 **Limitation — model selection.** With only 10 validation videos, validation accuracy is quantized to 10% steps and **all four configurations tie at 0.700**, so validation cannot distinguish between them. The intended "select on validation, report on test" protocol is therefore unreliable for this split; the test ranking above is reported for transparency, not as a validated selection.
 
-```
-
-## Usage
-
-```bash
-# install
-python -m pip install torch torchvision transformers peft pynvml openpyxl matplotlib
-
-# segmentation (set REGIME = 'full' then 'lora' at the top of each file)
-python vident_swin_seg_metrics.py
-python vident_vivit_seg_metrics.py
-python plot_seg_results.py
-
-# classification (set MODEL and REGIME at the top, run all four cells)
-python vident_classify.py
-python plot_cls_results.py
-```
-
-Edit the `ROOT` / `LABELS_XLSX` / `SAVE_DIR` paths at the top of each script to point to a **local** copy of the data (reading clips off a shared network drive starves the GPU). Keep `SMOKE_TEST = True` for the first run to verify the folder→label mapping before launching the full run.
-
 ## Environment
 
 RTX 5090 (Blackwell), Windows, Python 3.13, PyTorch 2.11 + CUDA 12.8, bfloat16.
