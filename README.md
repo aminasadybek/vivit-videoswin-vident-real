@@ -32,5 +32,3 @@ plot_seg_results.py           # IoU/Dice + loss curves, summary table
 make_overlays.py              # comparison panels (no retraining)
 Vident_seg_results/           # JSONs, figures
 ```
-
-RTX 5090 · Python 3.13 · PyTorch 2.11 + CUDA 12.8 · bfloat16. Dataset © Gdansk University of Technology (CC BY-NC 4.0).
