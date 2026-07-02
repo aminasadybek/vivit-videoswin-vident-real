@@ -1,0 +1,5 @@
+Model,Regime,Val(seg),Val(clip),Test(seg),Test(clip),TestBal(seg),TestBal(clip),BestEp,Time(h)
+Video Swin-B,FULL,0.5385,0.4957,0.6296,0.6102,0.5030,0.3733,3,0.96
+Video Swin-B,LORA,0.6154,0.7350,0.5556,0.5020,0.4673,0.3226,2,0.93
+ViViT-B,FULL,0.6154,0.6923,0.5556,0.5143,0.3735,0.2903,8,0.72
+ViViT-B,LORA,0.5385,0.6410,0.5185,0.5061,0.4360,0.3621,1,0.78
