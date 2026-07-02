@@ -1,75 +1,70 @@
-# ViViT-B vs Video Swin-B on Vident-real
+# ViViT-B vs Video Swin-B on Vident-real — Quadrant Classification (Parameter-Efficient Fine-Tuning, Focal Loss)
 
-Comparison of two video transformer backbones — **ViViT-B** and **Video Swin-B** (both pretrained on Kinetics-400) — under **full fine-tuning** versus **LoRA** (parameter-efficient fine-tuning) on the [Vident-real](https://mostwiedzy.pl/en/open-research-data/) intra-oral dental video dataset. For every configuration we record both task quality and efficiency: training time, peak VRAM, average power, and energy (measured via NVML).
+Dental quadrant (Q1–Q4) classification on the [Vident-real](https://mostwiedzy.pl/en/open-research-data/) intra-oral dental video dataset, comparing **ViViT-B** and **Video Swin-B** (Kinetics-400 pretrained) under three additional fine-tuning techniques — **Frozen** (linear probe), **BitFit**, and **Partial** (last-K blocks) — using **class-weighted focal loss**. These extend the Full-FT and LoRA comparison with the low-capacity end of the fine-tuning spectrum. Protocol: select on validation, report on test.
 
-Conducted as part of **ESAI406** at Nazarbayev University, ESAI Lab, supervised by Prof. Jurn Gyu Park.
+## Setup
 
-## Tasks
+- Dataset: Vident-real (Gdansk Univ., CC BY-NC 4.0), pre-split 65/10/25 train/val/test videos. Labels from the classification spreadsheet, matched to folders by frame count. Dataset not included.
+- Each annotated **Specified-Frames** range is treated as an independent example ("segment as video"), expanding the videos into **81 / 13 / 27** train/val/test segments.
+- 4 classes (Q1–Q4); 32-frame clips at 224×224 (within-clip temporal stride 2, papers' 32×2, with fallback to 1 for short segments).
+- **Loss:** class-weighted **focal loss** (γ = 2) — the same loss used for the Full/LoRA focal runs, so the whole fine-tuning spectrum is compared under a fixed loss.
+- Clip-level training, **per-segment** prediction (clips aggregated). Reported with balanced accuracy + confusion matrix (a trivial "always Q1" baseline ≈ 52% on the 27-segment test set).
 
-The repository covers two tasks on the same dataset, kept on separate branches:
+## Fine-tuning techniques
 
-| Branch | Task | Label source | Quality metric |
-|---|---|---|---|
-| `vident-real-segmentation` | Teeth segmentation (binary mask per frame) | `masks/` folder | IoU, Dice |
-| `vident-real-classification` | Dental quadrant classification (Q1–Q4) | spreadsheet `Location` column | Accuracy, balanced accuracy |
+All techniques share the same Kinetics-400 pretrained backbone and a freshly-trained 4-class head; they differ in how many parameters are trainable. Ordered by trainable-parameter count:
 
-The **2 models × 2 fine-tuning regimes** grid (4 cells) is run for each task.
+| Regime | Trainable | What is trained |
+|---|---|---|
+| **Frozen** (linear probe) | ~0.005% | Only the classification head; the entire backbone is frozen. |
+| **BitFit** | ~0.16% | Only the bias terms of non-normalization layers, plus the head. |
+| **Partial** | ~29% | The last *K* transformer blocks (K = 2) plus the head; earlier layers frozen. |
 
-## Dataset
+For reference, the companion runs cover **LoRA** (~1%) and **Full FT** (100%), giving the complete spectrum **frozen → bitfit → lora → partial → full**.
 
-Vident-real (Gdansk University of Technology, CC BY-NC 4.0): ~100 intra-oral surgical videos, 800×800, split into **65 train / 10 validation / 25 test** videos. Each video folder contains `input/` (RGB frames), `masks/` (teeth masks), `GT/`, and motion data. Quadrant labels (Q1–Q4) come from the accompanying classification spreadsheet and are matched to video folders by frame count.
+## Labels
 
-> The dataset itself and trained checkpoints (`.pth`) are **not** included in this repository.
+The quadrant labels are in `Vident-real classification label (Dental location).xlsx` (sheet `Modified`), included in this repo. Each row describes one annotated segment of a video:
 
-## Method
+| Column | Meaning |
+|---|---|
+| `Segmented Videos` | Running index of segments (a segmented clip within a video). Some videos are split into several rows. |
+| `Vident-real Videos` | The video number (blank on continuation rows that belong to the video above). |
+| `#Frames` | Total frame count of the video — used to match the spreadsheet row to its hex-named folder on disk. |
+| `Specified Frames` | The annotated frame range for this label, e.g. `1-706`. **Only frames inside these ranges are used**; frames outside any range are excluded (some videos are only partially annotated). |
+| `Location` | The quadrant label: `Q1` (maxillary right), `Q2` (maxillary left), `Q3` (mandibular left), `Q4` (mandibular right). |
 
-- **Backbones:** torchvision `swin3d_b` (Kinetics-400) and HuggingFace `vivit-b-16x2-kinetics400`.
-- **Clips:** 32 frames at 224×224 (ViViT requires 32; Swin matched to 32 so efficiency metrics are comparable).
-- **Regimes:** full fine-tuning vs LoRA (rank 8, applied to FFN/attention projections; task head trained fully).
-- **Segmentation:** transformer used as encoder + a decoder; BCE + Dice loss; center-frame mask prediction.
-- **Classification:** clip-level training, then clips aggregated to a **per-video** prediction; class-weighted cross-entropy to handle imbalance; model selected on validation, reported on test.
-- **Efficiency:** NVML power sampling → average power and energy (Wh) for training and full-dataset inference; peak VRAM via CUDA stats.
-- **Precision:** bfloat16 autocast on RTX 5090 (TF32 enabled, cuDNN benchmark on).
+Notes:
+- All ranges within a single video share the same quadrant, so the label is unambiguous per video; the split into ranges only controls *which frames* are used.
+- Following the supervisor's instruction, each `Specified Frames` range is treated as its own example, giving the 81 / 13 / 27 segment counts above.
+- **Caveat:** cell `A1` of the spreadsheet links to *Vident-synth*, but the labels and frame counts correspond to *Vident-real* (the dataset used here, and the one provided by the supervisor). The link appears to be a stray reference; the annotations themselves are for Vident-real.
 
-## Segmentation results
+## Results
 
-Center-frame teeth segmentation, 32-frame clips, full validation set.
+Per-segment metrics, class-weighted focal loss (γ = 2).
 
-| Model | Regime | Best Val IoU | Best Val Dice |
-|---|---|---|---|
-| Video Swin-B | Full FT | 0.8204 | 0.8944 |
-| Video Swin-B | LoRA | 0.8204 | 0.8960 |
-| ViViT-B | Full FT | ~0.78 | ~0.87 |
-| ViViT-B | LoRA | ~0.76 | ~0.85 |
-
-**Findings:**
-- **LoRA matches full fine-tuning** while training only ~1% of the parameters (it ties rather than beats on this task).
-- **Video Swin-B outperforms ViViT-B**, consistent with its multi-scale hierarchical features suiting dense prediction over ViViT's single coarse token grid.
-- Adding a cosine LR scheduler + gradient clipping smooths the Video Swin validation fluctuation (caused by a constant LR with full FT) and shifts the best epoch later, with essentially unchanged final IoU (~+0.004) — i.e. a stability fix, not an accuracy gain.
-
-Overlay panels (`input | ground truth | Video Swin | ViViT`) are in the segmentation branch and visually confirm both models localize teeth, with Swin producing slightly cleaner masks.
-
-## Classification results
-
-Dental quadrant (Q1–Q4) classification, per-video prediction (clips aggregated per video). The dataset is small (65/10/25 videos) and heavily imbalanced (Q1 ≈ half), so overall accuracy is reported alongside balanced accuracy and a confusion matrix. A trivial "always predict Q1" baseline reaches ~48% on the test set.
-
-| Model | Regime | Val Acc | Test Acc | Test Balanced Acc | Best Epoch |
+| Model | Regime | Val Acc | Test Acc | Test Balanced | Best Ep |
 |---|---|---|---|---|---|
-| Video Swin-B | Full FT | 0.700 | 0.520 | 0.458 | 1 |
-| Video Swin-B | LoRA | 0.700 | 0.560 | 0.469 | 12 |
-| ViViT-B | Full FT | 0.700 | 0.480 | 0.333 | 6 |
-| ViViT-B | LoRA | 0.700 | **0.600** | **0.500** | 2 |
+| Video Swin-B | BitFit | 0.6923 | **0.5926** | 0.4464 | 2 |
+| Video Swin-B | Frozen | 0.6154 | 0.4444 | 0.3348 | 12 |
+| Video Swin-B | Partial | 0.6154 | 0.4444 | 0.3482 | 1 |
+| ViViT-B | BitFit | 0.3846 | 0.5185 | 0.4494 | 1 |
+| ViViT-B | Frozen | 0.4615 | 0.5556 | **0.5461** | 3 |
+| ViViT-B | Partial | 0.6154 | 0.4074 | 0.4613 | 1 |
 
-**Findings:**
-- **LoRA outperforms full fine-tuning for both backbones** (Swin 0.56 vs 0.52, ViViT 0.60 vs 0.48). On a dataset this small, full fine-tuning overfits almost immediately — training accuracy reaches ~100% while validation/test collapse and validation loss diverges — whereas LoRA's limited capacity acts as a regularizer. Best configuration overall: **ViViT-B + LoRA** (test accuracy 0.60, balanced 0.50).
-- Results are **modest and limited by the dataset**. Balanced accuracies (0.33–0.50) sit above the 0.25 random-chance level but show that predicting dental quadrant from video is only weakly learnable here; all confusion matrices show the models leaning toward the majority class Q1. ViViT-B Full FT (0.48) does not exceed the always-Q1 baseline.
+**Findings**
 
-**Limitation — model selection.** With only 10 validation videos, validation accuracy is quantized to 10% steps and **all four configurations tie at 0.700**, so validation cannot distinguish between them. The intended "select on validation, report on test" protocol is therefore unreliable for this split; the test ranking above is reported for transparency, not as a validated selection.
+- **These low-capacity techniques land in the same ~0.41–0.59 test band** as Full FT and LoRA. Combined with the companion Full/LoRA runs, test accuracy across the entire spectrum (frozen → bitfit → lora → partial → full) stays within a narrow range — evidence that the **fine-tuning technique is not the bottleneck**; dataset size and class imbalance are.
+- For Video Swin-B, **BitFit** is the strongest of the three (test 0.59), while Frozen and Partial drop to ~0.44. For ViViT-B, **Frozen** gives the best balanced accuracy of any run in this table (0.55), suggesting its Kinetics features transfer reasonably without adaptation.
+- Results remain **modest and Q1-leaning**; balanced accuracies (0.33–0.55) sit above the 0.25 random-chance level but confirm the task is only weakly learnable at this data scale.
+- **Limitation — model selection.** With only 13 validation segments, validation accuracy is quantized to ~7.7% steps and only weakly separates techniques. The test numbers are reported for transparency; given the 27-segment test set, small differences between techniques are within noise and should not be over-interpreted.
 
-## Environment
+## Files
 
-RTX 5090 (Blackwell), Windows, Python 3.13, PyTorch 2.11 + CUDA 12.8, bfloat16.
-
-## Acknowledgements
-
-Vident-real dataset © Gdansk University of Technology (CC BY-NC 4.0). Work supervised by Prof. Jurn Gyu Park, ESAI Lab, Nazarbayev University.
+```
+vident_classify_ft.py                                    # Frozen / Partial (set MODEL, REGIME, PARTIAL_K)
+vident_classify_bitfit.py                                # BitFit (set MODEL)
+plot_cls_results_focal.py                                # accuracy/loss curves + confusion matrices + summary
+Vident-real classification label (Dental location).xlsx  # quadrant labels (sheet: Modified)
+Vident_cls_results_ft_focal/                             # JSONs, figures, summary
+```
