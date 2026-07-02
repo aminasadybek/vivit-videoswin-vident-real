@@ -1,75 +1,55 @@
-# ViViT-B vs Video Swin-B on Vident-real
+# ViViT-B vs Video Swin-B on Vident-real — Quadrant Classification (Focal Loss)
 
-Comparison of two video transformer backbones — **ViViT-B** and **Video Swin-B** (both pretrained on Kinetics-400) — under **full fine-tuning** versus **LoRA** (parameter-efficient fine-tuning) on the [Vident-real](https://mostwiedzy.pl/en/open-research-data/) intra-oral dental video dataset. For every configuration we record both task quality and efficiency: training time, peak VRAM, average power, and energy (measured via NVML).
+Dental quadrant (Q1–Q4) classification on the [Vident-real](https://mostwiedzy.pl/en/open-research-data/) intra-oral dental video dataset, comparing **ViViT-B** and **Video Swin-B** (Kinetics-400 pretrained) under **full fine-tuning** vs **LoRA**, using **class-weighted focal loss** for the class imbalance. Protocol: select on validation, report on test.
 
-Conducted as part of **ESAI406** at Nazarbayev University, ESAI Lab, supervised by Prof. Jurn Gyu Park.
+## Setup
 
-## Tasks
+- Dataset: Vident-real (Gdansk Univ., CC BY-NC 4.0), pre-split 65/10/25 train/val/test videos. Labels from the classification spreadsheet, matched to folders by frame count. Dataset not included.
+- Each annotated **Specified-Frames** range is treated as an independent example ("segment as video"), expanding the videos into **81 / 13 / 27** train/val/test segments.
+- 4 classes (Q1–Q4); 32-frame clips at 224×224 (within-clip temporal stride 2, papers' 32×2, with fallback to 1 for short segments).
+- **Loss:** class-weighted **focal loss** (γ = 2). Keeps the inverse-frequency class weights and adds the (1−pₜ)^γ focusing term to down-weight easy clips and emphasise hard/minority cases. At γ = 0 this reduces exactly to the class-weighted cross-entropy baseline.
+- Clip-level training, **per-segment** prediction (clips aggregated). Reported with balanced accuracy + confusion matrix (a trivial "always Q1" baseline ≈ 52% on the 27-segment test set).
 
-The repository covers two tasks on the same dataset, kept on separate branches:
+## Labels
 
-| Branch | Task | Label source | Quality metric |
-|---|---|---|---|
-| `vident-real-segmentation` | Teeth segmentation (binary mask per frame) | `masks/` folder | IoU, Dice |
-| `vident-real-classification` | Dental quadrant classification (Q1–Q4) | spreadsheet `Location` column | Accuracy, balanced accuracy |
+The quadrant labels are in `Vident-real classification label (Dental location).xlsx` (sheet `Modified`), included in this repo. Each row describes one annotated segment of a video:
 
-The **2 models × 2 fine-tuning regimes** grid (4 cells) is run for each task.
+| Column | Meaning |
+|---|---|
+| `Segmented Videos` | Running index of segments (a segmented clip within a video). Some videos are split into several rows. |
+| `Vident-real Videos` | The video number (blank on continuation rows that belong to the video above). |
+| `#Frames` | Total frame count of the video — used to match the spreadsheet row to its hex-named folder on disk. |
+| `Specified Frames` | The annotated frame range for this label, e.g. `1-706`. **Only frames inside these ranges are used**; frames outside any range are excluded (some videos are only partially annotated). |
+| `Location` | The quadrant label: `Q1` (maxillary right), `Q2` (maxillary left), `Q3` (mandibular left), `Q4` (mandibular right). |
 
-## Dataset
+Notes:
+- All ranges within a single video share the same quadrant, so the label is unambiguous per video; the split into ranges only controls *which frames* are used.
+- Following the supervisor's instruction, each `Specified Frames` range is treated as its own example, giving the 81 / 13 / 27 segment counts above.
+- **Caveat:** cell `A1` of the spreadsheet links to *Vident-synth*, but the labels and frame counts correspond to *Vident-real* (the dataset used here, and the one provided by the supervisor). The link appears to be a stray reference; the annotations themselves are for Vident-real.
 
-Vident-real (Gdansk University of Technology, CC BY-NC 4.0): ~100 intra-oral surgical videos, 800×800, split into **65 train / 10 validation / 25 test** videos. Each video folder contains `input/` (RGB frames), `masks/` (teeth masks), `GT/`, and motion data. Quadrant labels (Q1–Q4) come from the accompanying classification spreadsheet and are matched to video folders by frame count.
+## Results
 
-> The dataset itself and trained checkpoints (`.pth`) are **not** included in this repository.
+Per-segment metrics, class-weighted focal loss (γ = 2).
 
-## Method
-
-- **Backbones:** torchvision `swin3d_b` (Kinetics-400) and HuggingFace `vivit-b-16x2-kinetics400`.
-- **Clips:** 32 frames at 224×224 (ViViT requires 32; Swin matched to 32 so efficiency metrics are comparable).
-- **Regimes:** full fine-tuning vs LoRA (rank 8, applied to FFN/attention projections; task head trained fully).
-- **Segmentation:** transformer used as encoder + a decoder; BCE + Dice loss; center-frame mask prediction.
-- **Classification:** clip-level training, then clips aggregated to a **per-video** prediction; class-weighted cross-entropy to handle imbalance; model selected on validation, reported on test.
-- **Efficiency:** NVML power sampling → average power and energy (Wh) for training and full-dataset inference; peak VRAM via CUDA stats.
-- **Precision:** bfloat16 autocast on RTX 5090 (TF32 enabled, cuDNN benchmark on).
-
-## Segmentation results
-
-Center-frame teeth segmentation, 32-frame clips, full validation set.
-
-| Model | Regime | Best Val IoU | Best Val Dice |
-|---|---|---|---|
-| Video Swin-B | Full FT | 0.8204 | 0.8944 |
-| Video Swin-B | LoRA | 0.8204 | 0.8960 |
-| ViViT-B | Full FT | ~0.78 | ~0.87 |
-| ViViT-B | LoRA | ~0.76 | ~0.85 |
-
-**Findings:**
-- **LoRA matches full fine-tuning** while training only ~1% of the parameters (it ties rather than beats on this task).
-- **Video Swin-B outperforms ViViT-B**, consistent with its multi-scale hierarchical features suiting dense prediction over ViViT's single coarse token grid.
-- Adding a cosine LR scheduler + gradient clipping smooths the Video Swin validation fluctuation (caused by a constant LR with full FT) and shifts the best epoch later, with essentially unchanged final IoU (~+0.004) — i.e. a stability fix, not an accuracy gain.
-
-Overlay panels (`input | ground truth | Video Swin | ViViT`) are in the segmentation branch and visually confirm both models localize teeth, with Swin producing slightly cleaner masks.
-
-## Classification results
-
-Dental quadrant (Q1–Q4) classification, per-video prediction (clips aggregated per video). The dataset is small (65/10/25 videos) and heavily imbalanced (Q1 ≈ half), so overall accuracy is reported alongside balanced accuracy and a confusion matrix. A trivial "always predict Q1" baseline reaches ~48% on the test set.
-
-| Model | Regime | Val Acc | Test Acc | Test Balanced Acc | Best Epoch |
+| Model | Regime | Val Acc | Test Acc | Test Balanced | Best Ep |
 |---|---|---|---|---|---|
-| Video Swin-B | Full FT | 0.700 | 0.520 | 0.458 | 1 |
-| Video Swin-B | LoRA | 0.700 | 0.560 | 0.469 | 12 |
-| ViViT-B | Full FT | 0.700 | 0.480 | 0.333 | 6 |
-| ViViT-B | LoRA | 0.700 | **0.600** | **0.500** | 2 |
+| Video Swin-B | Full FT | 0.6923 | **0.6296** | 0.5030 | 3 |
+| Video Swin-B | LoRA | 0.6154 | 0.5556 | 0.4673 | 2 |
+| ViViT-B | Full FT | 0.5385 | 0.5556 | 0.4673 | 12 |
+| ViViT-B | LoRA | 0.5385 | 0.5185 | 0.4360 | 1 |
 
-**Findings:**
-- **LoRA outperforms full fine-tuning for both backbones** (Swin 0.56 vs 0.52, ViViT 0.60 vs 0.48). On a dataset this small, full fine-tuning overfits almost immediately — training accuracy reaches ~100% while validation/test collapse and validation loss diverges — whereas LoRA's limited capacity acts as a regularizer. Best configuration overall: **ViViT-B + LoRA** (test accuracy 0.60, balanced 0.50).
-- Results are **modest and limited by the dataset**. Balanced accuracies (0.33–0.50) sit above the 0.25 random-chance level but show that predicting dental quadrant from video is only weakly learnable here; all confusion matrices show the models leaning toward the majority class Q1. ViViT-B Full FT (0.48) does not exceed the always-Q1 baseline.
+**Findings**
 
-**Limitation — model selection.** With only 10 validation videos, validation accuracy is quantized to 10% steps and **all four configurations tie at 0.700**, so validation cannot distinguish between them. The intended "select on validation, report on test" protocol is therefore unreliable for this split; the test ranking above is reported for transparency, not as a validated selection.
+- **Focal loss matches the cross-entropy baseline.** Test accuracy is identical to the class-weighted cross-entropy runs (Swin Full 0.63, Swin LoRA / ViViT Full 0.56, ViViT LoRA 0.52), with only minor differences in balanced accuracy. Since the baseline already applies class weighting, the additional focusing term adds little — the loss function is not the limiting factor on this dataset.
+- **No fine-tuning regime clearly dominates.** Test accuracy spans 0.52–0.63, within the noise of a 27-segment test set. The highest test accuracy is **Video Swin-B + Full FT (0.63)**; full FT is not outperformed by LoRA here.
+- Results are **modest and Q1-leaning** — balanced accuracy 0.44–0.50 (chance 0.25); quadrant-from-video is only weakly learnable on this small, imbalanced set.
+- **Limitation — model selection.** With only 13 validation segments, validation accuracy is quantized to ~7.7% steps and only weakly separates models. The test ranking is reported for transparency, not as a validated selection.
 
-## Environment
+## Files
 
-RTX 5090 (Blackwell), Windows, Python 3.13, PyTorch 2.11 + CUDA 12.8, bfloat16.
-
-## Acknowledgements
-
-Vident-real dataset © Gdansk University of Technology (CC BY-NC 4.0). Work supervised by Prof. Jurn Gyu Park, ESAI Lab, Nazarbayev University.
+```
+vident_classify_focal.py                             # both models × both regimes, focal loss (set MODEL, REGIME)
+plot_cls_results_focal.py                                # accuracy/loss curves + confusion matrices + summary
+Vident-real classification label (Dental location).xlsx  # quadrant labels (sheet: Modified)
+Vident_cls_results_focal/                                # JSONs, figures, summary_focal.csv
+```
